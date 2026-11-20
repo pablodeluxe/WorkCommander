@@ -838,6 +838,8 @@ class WorkCommander:
         self._view_split = None
         self.viewers = [None, None]
 
+        if isinstance(start_path, str):
+            start_path = _clean_arg(start_path)
         if not start_path or not os.path.isdir(start_path):
             start_path = os.getcwd()
         start_path = os.path.abspath(start_path)
@@ -2220,10 +2222,29 @@ def log_error(exc):
         pass
 
 
+def _clean_arg(arg):
+    """Normaliza un argumento de linea de comandos: quita comillas envolventes
+    y espacios sobrantes para que rutas como "D:\\Proyectos" se reconozcan,
+    incluso si el lanzador no retira las comillas (invocacion programatica) o
+    si una barra invertida final escapo la comilla de cierre."""
+    if arg is None:
+        return None
+    text = arg.strip()
+    # Quitar comillas envolventes (simples o dobles).
+    while len(text) >= 2 and text[0] in "\"'" and text[-1] == text[0]:
+        text = text[1:-1].strip()
+    # Eliminar comillas sueltas que hayan quedado (caso barra final escapada).
+    text = text.strip().rstrip('"').rstrip("'").strip()
+    return text
+
+
 def main():
     start = None
-    for arg in sys.argv[1:]:
-        if not arg.startswith("-") and os.path.isdir(arg):
+    for raw in sys.argv[1:]:
+        arg = _clean_arg(raw)
+        if not arg or arg.startswith("-"):
+            continue
+        if os.path.isdir(arg):
             start = arg
             break
     try:
@@ -2233,7 +2254,7 @@ def main():
         print("No se pudo iniciar WorkCommander: %s" % ex)
         return 1
 
-    if "--selftest" in sys.argv:
+    if any(_clean_arg(a) == "--selftest" for a in sys.argv[1:]):
         try:
             app.draw()
             return 0
