@@ -17,14 +17,14 @@ ejecución.
 | Dato | Valor |
 |---|---|
 | Nombre | WorkCommander |
-| Versión | 1.1 |
+| Versión | 1.2 |
 | Tipo | Aplicación de consola interactiva (TUI) |
 | Plataforma | Windows (validado en Windows 10/11, CMD y Windows Terminal) |
 | Lenguaje | Python 3.8+ (validado con Python 3.12.5) |
 | Dependencias de ejecución | Ninguna externa: `ctypes`, `os`, `shutil`, `msvcrt`, `stat`, `string`, `subprocess`, `sys`, `time`, `datetime` |
 | Renderizado | Doble búfer propio + `WriteConsoleOutputW` (sin ANSI/VT) |
 | Entrada | `msvcrt.getwch()` (teclas normales y extendidas) |
-| Persistencia | Ninguna: no hay configuración, historial ni registro en disco |
+| Persistencia | Ninguna de configuración/historial; se genera `workcommander_error.log` solo si ocurre un error |
 | Empaquetado | PyInstaller 6.22.3, modo `--onefile --console` |
 | Ejecutable | `dist\WorkCommander.exe` — 7.426.736 bytes |
 | SHA-256 del ejecutable | `D4E08CA43730F57F3A14970D59803B5668F8275DFF793FED3E8B3BD2E36E2410` |
@@ -130,7 +130,8 @@ No se necesita:
 - Conexión a Internet (salvo para que `build_exe.bat` instale PyInstaller).
 - Variables de entorno especiales.
 - Terminal con soporte ANSI.
-- Ratón.
+- Ratón (opcional: la aplicación soporta mouse para moverse y abrir archivos,
+  además del teclado).
 
 ---
 

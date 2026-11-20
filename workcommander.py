@@ -24,6 +24,7 @@ import string
 import subprocess
 import sys
 import time
+import traceback
 from ctypes import wintypes
 from datetime import datetime
 
@@ -42,6 +43,7 @@ STD_OUTPUT_HANDLE = -11
 
 ENABLE_EXTENDED_FLAGS = 0x0080
 ENABLE_QUICK_EDIT_MODE = 0x0040
+ENABLE_MOUSE_INPUT = 0x0010
 
 
 class COORD(ctypes.Structure):
@@ -174,8 +176,12 @@ class Screen:
         if kernel32.GetConsoleMode(self.hin, ctypes.byref(mode)):
             self._old_input_mode = mode.value
             kernel32.SetConsoleMode(
-                self.hin, (mode.value | ENABLE_EXTENDED_FLAGS) & ~ENABLE_QUICK_EDIT_MODE
+                self.hin, (mode.value | ENABLE_EXTENDED_FLAGS | ENABLE_MOUSE_INPUT) & ~ENABLE_QUICK_EDIT_MODE
             )
+        try:
+            ctypes.windll.user32.ShowCursor(False)
+        except Exception:
+            pass
 
     def show_cursor(self, visible=True):
         info = CONSOLE_CURSOR_INFO(25, 1 if visible else 0)
@@ -304,6 +310,10 @@ class Screen:
                 )
             if self._old_input_mode is not None:
                 kernel32.SetConsoleMode(self.hin, self._old_input_mode)
+            try:
+                ctypes.windll.user32.ShowCursor(True)
+            except Exception:
+                pass
             kernel32.SetConsoleTitleW(self._old_title or "WorkCommander")
         except Exception:
             pass
@@ -314,12 +324,71 @@ class Screen:
 # --------------------------------------------------------------------------
 
 
+class KEY_EVENT_RECORD(ctypes.Structure):
+    _fields_ = [
+        ("bKeyDown", wintypes.BOOL),
+        ("wRepeatCount", wintypes.WORD),
+        ("wVirtualKeyCode", wintypes.WORD),
+        ("wVirtualScanCode", wintypes.WORD),
+        ("uChar", ctypes.c_wchar),
+        ("dwControlKeyState", wintypes.DWORD),
+    ]
+
+
+class INPUT_RECORD(ctypes.Structure):
+    class _EVENT(ctypes.Union):
+        class _MOUSE_EVENT(ctypes.Structure):
+            _fields_ = [
+                ("dwMousePosition", COORD),
+                ("dwButtonState", wintypes.DWORD),
+                ("dwControlKeyState", wintypes.DWORD),
+                ("dwEventFlags", wintypes.DWORD),
+            ]
+        _fields_ = [("KeyEvent", KEY_EVENT_RECORD), ("MouseEvent", _MOUSE_EVENT)]
+    _fields_ = [("EventType", wintypes.WORD), ("Event", _EVENT)]
+
+
+kernel32.GetNumberOfConsoleInputEvents.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
+kernel32.GetNumberOfConsoleInputEvents.restype = wintypes.BOOL
+kernel32.ReadConsoleInputW.argtypes = [wintypes.HANDLE, ctypes.POINTER(INPUT_RECORD), wintypes.DWORD, ctypes.POINTER(wintypes.DWORD)]
+kernel32.ReadConsoleInputW.restype = wintypes.BOOL
+kernel32.PeekConsoleInputW.argtypes = [wintypes.HANDLE, ctypes.POINTER(INPUT_RECORD), wintypes.DWORD, ctypes.POINTER(wintypes.DWORD)]
+kernel32.PeekConsoleInputW.restype = wintypes.BOOL
+
+
 def read_key():
-    """Devuelve ('char', texto) o ('special', codigo)."""
-    ch = msvcrt.getwch()
-    if ch in ("\x00", "\xe0"):
-        return ("special", msvcrt.getwch())
-    return ("char", ch)
+    """Devuelve ('char', texto), ('special', codigo) o ('mouse', dict)."""
+    hin = kernel32.GetStdHandle(STD_INPUT_HANDLE)
+    while True:
+        if msvcrt.kbhit():
+            ch = msvcrt.getwch()
+            if ch in ("\x00", "\xe0"):
+                return ("special", msvcrt.getwch())
+            return ("char", ch)
+        
+        # Revisar eventos de consola (incluyendo mouse), sin consumir teclado.
+        num_events = wintypes.DWORD(0)
+        if kernel32.GetNumberOfConsoleInputEvents(hin, ctypes.byref(num_events)) and num_events.value > 0:
+            rec = INPUT_RECORD()
+            read_count = wintypes.DWORD(0)
+            if kernel32.PeekConsoleInputW(hin, ctypes.byref(rec), 1, ctypes.byref(read_count)) and read_count.value > 0:
+                if rec.EventType == 0x0002:  # MOUSE_EVENT
+                    # Consumir el evento de mouse.
+                    kernel32.ReadConsoleInputW(hin, ctypes.byref(rec), 1, ctypes.byref(read_count))
+                    me = rec.Event.MouseEvent
+                    return ("mouse", {
+                        "x": me.dwMousePosition.X,
+                        "y": me.dwMousePosition.Y,
+                        "button": me.dwButtonState,
+                        "flags": me.dwEventFlags
+                    })
+                elif rec.EventType == 0x0001:  # KEY_EVENT: dejar que msvcrt lo gestione.
+                    return None
+                else:
+                    # Consumir otros eventos (foco, etc.) para no bloquear.
+                    kernel32.ReadConsoleInputW(hin, ctypes.byref(rec), 1, ctypes.byref(read_count))
+                    return None
+        time.sleep(0.01)
 
 
 def wrap_text(text, width):
@@ -763,6 +832,11 @@ class WorkCommander:
         self._prog = None
         self.search_buf = ""
         self.search_time = 0.0
+        self.mouse_x = -1
+        self.mouse_y = -1
+        self.mouse_over = False
+        self._view_split = None
+        self.viewers = [None, None]
 
         if not start_path or not os.path.isdir(start_path):
             start_path = os.getcwd()
@@ -848,7 +922,15 @@ class WorkCommander:
             scr.put(x + 2, y + 6, "Enter = aceptar     Esc = cancelar"[: max(1, w - 4)], C_HINT)
             scr.flush()
 
-            kind, val = read_key()
+            key = read_key()
+            if not key:
+                continue
+            kind, val = key
+            if kind == "mouse":
+                self.mouse_x = val["x"]
+                self.mouse_y = val["y"]
+                self.mouse_over = True
+                continue
             if kind == "special":
                 if val == "K":
                     pos = max(0, pos - 1)
@@ -897,7 +979,15 @@ class WorkCommander:
         scr.put(x + 2, y + h - 2, "  (S) Si        (N) No  "[: max(1, w - 4)], C_HINT)
         scr.flush()
         while True:
-            kind, val = read_key()
+            key = read_key()
+            if not key:
+                continue
+            kind, val = key
+            if kind == "mouse":
+                self.mouse_x = val["x"]
+                self.mouse_y = val["y"]
+                self.mouse_over = True
+                continue
             if kind == "special":
                 continue
             if val in ("s", "S", "y", "Y", "\r"):
@@ -929,7 +1019,15 @@ class WorkCommander:
         scr.put(x + 2, y + h - 2, hint[: max(1, w - 4)], C_HINT)
         scr.flush()
         while True:
-            kind, val = read_key()
+            key = read_key()
+            if not key:
+                continue
+            kind, val = key
+            if kind == "mouse":
+                self.mouse_x = val["x"]
+                self.mouse_y = val["y"]
+                self.mouse_over = True
+                continue
             if kind == "special":
                 continue
             if val == "\x1b":
@@ -937,9 +1035,9 @@ class WorkCommander:
             if val == "\r":
                 return options[0][0] if options else None
             low = val.lower()
-            for key, _label in options:
-                if low == key.lower():
-                    return key
+            for k, _label in options:
+                if low == k.lower():
+                    return k
 
     def dialog_message(self, title, lines, error=False):
         scr = self.scr
@@ -983,10 +1081,16 @@ class WorkCommander:
         if self._prog is None:
             return
         now = time.time()
-        while msvcrt.kbhit():
-            k = read_key()
-            if k == ("char", "\x1b"):
-                self._prog["cancel"] = True
+        # Cancelar con Esc sin bloquear
+        hin = kernel32.GetStdHandle(STD_INPUT_HANDLE)
+        num_events = wintypes.DWORD(0)
+        if kernel32.GetNumberOfConsoleInputEvents(hin, ctypes.byref(num_events)) and num_events.value > 0:
+            rec = INPUT_RECORD()
+            read_count = wintypes.DWORD(0)
+            if kernel32.ReadConsoleInputW(hin, ctypes.byref(rec), 1, ctypes.byref(read_count)) and read_count.value > 0:
+                if rec.EventType == 0x0001:  # KEY_EVENT
+                    if rec.Event.KeyEvent.bKeyDown and rec.Event.KeyEvent.uChar.UnicodeChar == "\x1b":
+                        self._prog["cancel"] = True
         if now - self._prog["last"] < 0.05 and done < total:
             return
         self._prog["last"] = now
@@ -1051,52 +1155,94 @@ class WorkCommander:
         return not errors
 
     # -- visor / paginador ------------------------------------------------
-    def pager(self, title, disp, info=""):
+    def pager_blocking(self, title, disp, info=""):
         scr = self.scr
+        split_side = getattr(self, "_view_split", None)
         top = 0
         while True:
             scr.sync_size()
-            page = max(1, scr.h - 2)
+            
+            # Calcular limites segun si es visor dividido (mitad de pantalla) o completo
+            if split_side == 0:
+                vx, vy, vw, vh = 0, 1, scr.w // 2, scr.h - 3
+            elif split_side == 1:
+                vw = scr.w - scr.w // 2
+                vx, vy, vw, vh = scr.w // 2, 1, vw, scr.h - 3
+            else:
+                vx, vy, vw, vh = 0, 0, scr.w, scr.h
+
+            page = max(1, vh - 2)
             top = max(0, min(top, max(0, len(disp) - page)))
-            scr.clear(C_VIEW)
-            scr.fill(0, 0, scr.w, 1, " ", C_TITLE)
-            scr.put(0, 0, (" " + title)[: scr.w].ljust(scr.w), C_TITLE)
+            
+            # Limpiar y dibujar marco del visor en su region correspondiente
+            scr.fill(vx, vy, vw, vh, " ", C_VIEW)
+            scr.box(vx, vy, vw, vh, C_FRAME, title)
+            
             for i in range(page):
                 if top + i >= len(disp):
                     break
-                scr.put(0, 1 + i, disp[top + i][: scr.w], C_VIEW)
-            scr.fill(0, scr.h - 1, scr.w, 1, " ", C_STATUS)
+                line_text = disp[top + i][: vw - 2]
+                scr.put(vx + 1, vy + 1 + i, line_text.ljust(vw - 2), C_VIEW)
+                
+            # Barra de estado inferior dentro del visor o en su linea inferior
             pos = "Lineas %d-%d de %d" % (
                 min(top + 1, len(disp)),
                 min(top + page, len(disp)),
                 len(disp),
             )
-            bar = " %s  |  %s  |  Flechas PgUp/PgDn Inicio/Fin  Esc salir" % (info, pos)
-            scr.put(0, scr.h - 1, bar[: scr.w].ljust(scr.w), C_STATUS)
+            bar = " %s | %s | Esc salir" % (info, pos)
+            scr.put(vx + 1, vy + vh - 1, bar[: vw - 2].ljust(vw - 2), C_STATUS)
+            
+            # Cursor estilo MS-DOS en posicion del mouse
+            if self.mouse_over and vx <= self.mouse_x < vx + vw and vy <= self.mouse_y < vy + vh:
+                idx = self.mouse_y * scr.w + self.mouse_x
+                if idx < len(scr.grid):
+                    ch, attr = scr.grid[idx]
+                    fg = attr & 0x0F
+                    bg = (attr >> 4) & 0x0F
+                    scr.grid[idx] = (ch, (fg << 4) | bg)
             scr.flush()
 
-            kind, val = read_key()
+            key = read_key()
+            if not key:
+                continue
+            kind, val = key
             if kind == "char":
                 if val in ("\x1b", "q", "Q"):
                     return
                 continue
-            if val in ("=", "D"):
-                return
-            if val == "H":
-                top = max(0, top - 1)
-            elif val == "P":
-                top = min(max(0, len(disp) - page), top + 1)
-            elif val == "I":
-                top = max(0, top - page)
-            elif val == "Q":
-                top = min(max(0, len(disp) - page), top + page)
-            elif val == "G":
-                top = 0
-            elif val == "O":
-                top = max(0, len(disp) - page)
+            if kind == "special":
+                if val in ("=", "D"):
+                    return
+                if val == "H":
+                    top = max(0, top - 1)
+                elif val == "P":
+                    top = min(max(0, len(disp) - page), top + 1)
+                elif val == "I":
+                    top = max(0, top - page)
+                elif val == "Q":
+                    top = min(max(0, len(disp) - page), top + page)
+                elif val == "G":
+                    top = 0
+                elif val == "O":
+                    top = max(0, len(disp) - page)
+            elif kind == "mouse":
+                self.mouse_x = val["x"]
+                self.mouse_y = val["y"]
+                self.mouse_over = True
+                # Click fuera del visor para cerrarlo
+                mx, my = val["x"], val["y"]
+                if not (vx <= mx < vx + vw and vy <= my < vy + vh):
+                    if val["button"] & 0x1:
+                        return
 
-    def view_file(self, path, mode=None):
+    def pager(self, title, disp, info=""):
+        # Visor no bloqueante: el renderizado persistente se hace en draw().
+        return
+
+    def view_file(self, path, mode=None, split_side=None):
         """Abre cualquier archivo. mode: None (auto), "t" (texto) o "h" (hex)."""
+        self._view_split = split_side
         try:
             size = os.path.getsize(path)
             with open(path, "rb") as f:
@@ -1122,23 +1268,31 @@ class WorkCommander:
                 return
             mode = choice
 
+        scr = self.scr
+        vw = (scr.w // 2 if split_side is not None else scr.w) - 2
+        width = max(10, vw)
+
         if mode == "h":
-            width = max(10, self.scr.w - 1)
             disp = hex_dump_lines(raw, width)
             info = "%s%s  hexadecimal" % (
                 size_label(size),
                 " (truncado)" if truncated else "",
             )
+            side = split_side if split_side is not None else self.active
+            self.viewers[side] = {
+                "title": os.path.basename(path) + " [hex]",
+                "disp": disp,
+                "info": info,
+                "top": 0,
+            }
             self.pager(os.path.basename(path) + " [hex]", disp, info)
             return
 
         text = decode_text(raw)
-        width = max(10, self.scr.w - 1)
         disp = []
         for line in text.split("\n"):
             line = line.rstrip("\r").replace("\t", "    ")
             if binary:
-                # En modo texto forzado, hacer visibles los bytes de control.
                 line = "".join(c if c >= " " and c != "\x7f" else "." for c in line)
             else:
                 line = "".join(c if c >= " " and c != "\x7f" else " " for c in line)
@@ -1153,6 +1307,13 @@ class WorkCommander:
         info = "%s%s" % (size_label(size), " (truncado)" if truncated else "")
         if binary:
             info += "  texto forzado"
+        side = split_side if split_side is not None else self.active
+        self.viewers[side] = {
+            "title": os.path.basename(path),
+            "disp": disp,
+            "info": info,
+            "top": 0,
+        }
         self.pager(os.path.basename(path), disp, info)
 
     # -- navegacion -------------------------------------------------------
@@ -1226,7 +1387,7 @@ class WorkCommander:
         if e.is_dir:
             self.dialog_message("Ver", ["Es una carpeta, no un archivo."])
             return
-        self.view_file(e.path)
+        self.view_file(e.path, split_side=self.active)
 
     def op_view_force(self):
         p = self.panels[self.active]
@@ -1244,7 +1405,7 @@ class WorkCommander:
         )
         if not choice:
             return
-        self.view_file(e.path, mode=choice)
+        self.view_file(e.path, mode=choice, split_side=self.active)
 
     def op_view_path(self):
         p = self.panels[self.active]
@@ -1268,7 +1429,7 @@ class WorkCommander:
         if not os.path.isfile(path):
             self.dialog_message("Ver", ["No es un archivo existente:", path], error=True)
             return
-        self.view_file(path)
+        self.view_file(path, split_side=self.active)
 
     def op_edit(self):
         p = self.panels[self.active]
@@ -1480,9 +1641,14 @@ class WorkCommander:
         self.flash("Carpeta creada: %s" % os.path.basename(target.rstrip("\\/")))
 
     def op_delete(self):
-        p = self.panels[self.active]
-        srcs = self.selected_entries()
-        if not srcs:
+        try:
+            p = self.panels[self.active]
+            srcs = self.selected_entries()
+            if not srcs:
+                return
+        except Exception as ex:
+            log_error(ex)
+            self.dialog_message("Borrar", ["Error:", str(ex)], error=True)
             return
         names = ", ".join(e.name for e in srcs[:3])
         if len(srcs) > 3:
@@ -1550,14 +1716,15 @@ class WorkCommander:
         width = max(10, self.scr.w - 1)
         for raw in HELP_TEXT.split("\n"):
             lines.extend(wrap_text(raw, width))
-        self.pager("Ayuda de WorkCommander", lines)
+        self._view_split = None
+        self.pager_blocking("Ayuda de WorkCommander", lines)
         self.draw()
 
     def op_about(self):
         self.dialog_message(
             "Acerca de",
             [
-                "WorkCommander 1.1",
+                "WorkCommander 1.2",
                 "Gestor de archivos de doble panel para consola Windows.",
                 "Inspirado en el clasico Norton Commander.",
                 "Python + API de consola Win32.",
@@ -1694,6 +1861,29 @@ class WorkCommander:
                 if avail > 0:
                     scr.put(sx + len(chip), y, (" " + label)[:avail], C_KEYBAR)
 
+    def _draw_viewer(self, scr, v, x, y, w, h, active):
+        if w < 10 or h < 5:
+            return
+        scr.fill(x, y, w, h, " ", C_VIEW)
+        scr.box(x, y, w, h, C_FRAME_ACTIVE if active else C_FRAME, v["title"])
+        disp = v["disp"]
+        page = max(1, h - 2)
+        top = v["top"]
+        top = max(0, min(top, max(0, len(disp) - page)))
+        v["top"] = top
+        for i in range(page):
+            if top + i >= len(disp):
+                break
+            line_text = disp[top + i][: w - 2]
+            scr.put(x + 1, y + 1 + i, line_text.ljust(w - 2), C_VIEW)
+        pos = "Lineas %d-%d de %d" % (
+            min(top + 1, len(disp)),
+            min(top + page, len(disp)),
+            len(disp),
+        )
+        bar = " %s | %s | Esc cerrar" % (v["info"], pos)
+        scr.put(x + 1, y + h - 1, bar[: w - 2].ljust(w - 2), C_STATUS)
+
     def draw(self):
         scr = self.scr
         scr.sync_size()
@@ -1710,11 +1900,29 @@ class WorkCommander:
 
         panel_h = scr.h - 3
         left_w = scr.w // 2
-        self.panels[0].draw(0, 1, left_w, panel_h, self.active == 0)
-        self.panels[1].draw(left_w, 1, scr.w - left_w, panel_h, self.active == 1)
+        regions = [(0, 1, left_w, panel_h), (left_w, 1, scr.w - left_w, panel_h)]
+        for side in (0, 1):
+            x, y, w, h = regions[side]
+            v = self.viewers[side]
+            if v is not None:
+                self._draw_viewer(scr, v, x, y, w, h, self.active == side)
+            else:
+                self.panels[side].draw(x, y, w, h, self.active == side)
 
         self.draw_status()
         self.draw_keybar()
+        
+        # Dibujar cursor estilo MS-DOS (bloque rectangular) en posicion del mouse
+        if self.mouse_over and 0 <= self.mouse_x < scr.w and 0 <= self.mouse_y < scr.h:
+            idx = self.mouse_y * scr.w + self.mouse_x
+            if idx < len(scr.grid):
+                ch, attr = scr.grid[idx]
+                # Invertir colores para simular bloque
+                fg = attr & 0x0F
+                bg = (attr >> 4) & 0x0F
+                new_attr = (fg << 4) | bg
+                scr.grid[idx] = (ch, new_attr)
+        
         scr.flush()
         self.last_draw = time.time()
 
@@ -1773,8 +1981,16 @@ class WorkCommander:
             self.draw()
             self.draw_menu()
             self.scr.flush()
-            kind, val = read_key()
-
+            key = read_key()
+            if not key:
+                continue
+            kind, val = key
+            if kind == "mouse":
+                self.mouse_x = val["x"]
+                self.mouse_y = val["y"]
+                self.mouse_over = True
+                continue
+            
             if kind == "special":
                 if val == "C":
                     break
@@ -1820,7 +2036,39 @@ class WorkCommander:
     def handle_key(self, key):
         kind, val = key
         p = self.panels[self.active]
-
+        
+        # Si hay un visor abierto en el panel activo, enrutar teclas a el.
+        v = self.viewers[self.active]
+        if v is not None:
+            scr = self.scr
+            panel_h = scr.h - 3
+            page = max(1, panel_h - 2)
+            disp = v["disp"]
+            if kind == "char":
+                if val in ("\x1b", "q", "Q"):
+                    self.viewers[self.active] = None
+                return
+            if kind == "special":
+                if val == "H":
+                    v["top"] = max(0, v["top"] - 1)
+                elif val == "P":
+                    v["top"] = min(max(0, len(disp) - page), v["top"] + 1)
+                elif val == "I":
+                    v["top"] = max(0, v["top"] - page)
+                elif val == "Q":
+                    v["top"] = min(max(0, len(disp) - page), v["top"] + page)
+                elif val == "G":
+                    v["top"] = 0
+                elif val == "O":
+                    v["top"] = max(0, len(disp) - page)
+                elif val in ("K", "M"):
+                    self.active = 0 if val == "K" else 1
+                elif val == "\x0f":
+                    self.active = 1 - self.active
+            elif val in ("\t", "\x0f"):
+                self.active = 1 - self.active
+            return
+        
         if kind == "special":
             if val == "H":
                 p.move(-1)
@@ -1881,6 +2129,36 @@ class WorkCommander:
         elif val and len(val) == 1 and val >= " ":
             self.quick_search(val)
 
+    def handle_mouse(self, ev):
+        scr = self.scr
+        mx, my = ev["x"], ev["y"]
+        button = ev["button"]
+        flags = ev["flags"]
+        
+        # Actualizar posicion del mouse
+        self.mouse_x = mx
+        self.mouse_y = my
+        self.mouse_over = (0 <= mx < scr.w and 0 <= my < scr.h)
+        
+        # Click izquierdo (button & 1, sin movimiento)
+        if button & 0x1 and flags == 0:
+            panel_h = scr.h - 3
+            if 1 <= my < 1 + panel_h:
+                mid = scr.w // 2
+                if mx < mid:
+                    self.active = 0
+                else:
+                    self.active = 1
+                # Solo seleccionar entrada si no hay visor en ese lado.
+                if self.viewers[self.active] is None:
+                    p = self.panels[self.active]
+                    list_y = 1 + 3
+                    row = my - list_y
+                    if 0 <= row < panel_h - 4:
+                        idx = p.offset + row
+                        if 0 <= idx < len(p.entries):
+                            p.index = idx
+
     # -- ejecucion --------------------------------------------------------
     def run(self):
         scr = self.scr
@@ -1889,19 +2167,57 @@ class WorkCommander:
             while self.running:
                 if scr.sync_size():
                     self.draw()
-                if msvcrt.kbhit():
-                    key = read_key()
-                    self.handle_key(key)
-                    if self.running:
-                        self.draw()
+                
+                # Revisar eventos de consola (teclado + mouse)
+                hin = kernel32.GetStdHandle(STD_INPUT_HANDLE)
+                num_events = wintypes.DWORD(0)
+                if kernel32.GetNumberOfConsoleInputEvents(hin, ctypes.byref(num_events)) and num_events.value > 0:
+                    try:
+                        key = read_key()
+                    except Exception as ex:
+                        log_error(ex)
+                        continue
+                    if key is not None:
+                        try:
+                            if key[0] == "mouse":
+                                self.handle_mouse(key[1])
+                            else:
+                                self.handle_key(key)
+                        except Exception as ex:
+                            log_error(ex)
+                        if self.running:
+                            try:
+                                self.draw()
+                            except Exception as ex:
+                                log_error(ex)
                 else:
                     if time.time() - self.last_draw >= 1.0:
-                        self.draw()
+                        try:
+                            self.draw()
+                        except Exception as ex:
+                            log_error(ex)
                     time.sleep(0.02)
         except KeyboardInterrupt:
             pass
+        except Exception as ex:
+            log_error(ex)
         finally:
             scr.cleanup()
+
+
+def log_error(exc):
+    try:
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "workcommander_error.log")
+    except Exception:
+        path = os.path.join(os.getcwd(), "workcommander_error.log")
+    try:
+        with open(path, "a", encoding="utf-8") as f:
+            f.write("=" * 70 + "\n")
+            f.write(time.strftime("%Y-%m-%d %H:%M:%S") + "\n")
+            traceback.print_exc(file=f)
+            f.write("\n")
+    except Exception:
+        pass
 
 
 def main():
@@ -1913,6 +2229,7 @@ def main():
     try:
         app = WorkCommander(start)
     except Exception as ex:
+        log_error(ex)
         print("No se pudo iniciar WorkCommander: %s" % ex)
         return 1
 
@@ -1923,7 +2240,10 @@ def main():
         finally:
             app.scr.cleanup()
 
-    app.run()
+    try:
+        app.run()
+    except Exception as ex:
+        log_error(ex)
     return 0
 
 
