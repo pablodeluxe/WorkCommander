@@ -2,7 +2,7 @@
 # Matriz de trazabilidad
 
 > **Proyecto**: WorkCommander  
-> **Generada**: 2026-11-20 10:09  
+> **Generada**: 2026-11-20 11:59  
 > **Especificaciones analizadas**: SPEC-001  
 > **Historias analizadas**: 21 (válidas: 21 · observadas: 0)
 
@@ -16,7 +16,7 @@
 | RF sin historias | 2 |
 | RF bloqueados por preguntas abiertas de alto impacto | 0 |
 | Criterios de aceptación con escenarios | 59 de 62 (95,2 %) |
-| Casos borde con escenarios | 13 de 17 (76,5 %) |
+| Casos borde con escenarios | 15 de 17 (88,2 %) |
 | Errores · Advertencias · No verificables | 0 · 0 · 0 |
 
 ---
@@ -131,8 +131,8 @@ Pedido de origen: **PED-001** · Archivo: `02-especificaciones\SPEC-001_PED-001_
 | CB-10 | — | US-007 · Esc. 7 | — |
 | CB-11 | — | US-003 · Esc. 5, US-004 · Esc. 3 | — |
 | CB-12 | — | US-021 · Esc. 2 | — |
-| CB-13 | — | Sin escenarios | — |
-| CB-14 | — | Sin escenarios | — |
+| CB-13 | — | US-009 · Esc. 11, US-010 · Esc. 7, US-013 · Esc. 4 | — |
+| CB-14 | — | US-009 · Esc. 12 | — |
 | CB-15 | — | US-019 · Esc. 3 | — |
 | CB-16 | — | Sin escenarios | — |
 | CB-17 | — | Sin escenarios | — |
@@ -162,7 +162,7 @@ Ninguno.
 | Tipo | Con escenarios | Sin escenarios | Cobertura |
 |---|---|---|---|
 | Criterios de aceptación | CA-RF01-01, CA-RF01-02, CA-RF01-03, CA-RF02-01, CA-RF02-02, CA-RF02-03, CA-RF03-01, CA-RF03-02, CA-RF03-03, CA-RF03-04, CA-RF04-01, CA-RF04-02, CA-RF05-01, CA-RF05-02, CA-RF06-01, CA-RF06-02, CA-RF07-01, CA-RF07-02, CA-RF07-03, CA-RF07-04, CA-RF07-05, CA-RF08-01, CA-RF08-02, CA-RF09-01, CA-RF09-02, CA-RF09-03, CA-RF09-04, CA-RF09-05, CA-RF10-01, CA-RF10-02, CA-RF10-03, CA-RF10-04, CA-RF11-01, CA-RF11-02, CA-RF11-03, CA-RF11-04, CA-RF12-01, CA-RF12-02, CA-RF12-03, CA-RF13-01, CA-RF13-02, CA-RF13-03, CA-RF14-01, CA-RF14-02, CA-RF14-03, CA-RF15-01, CA-RF15-02, CA-RF16-01, CA-RF16-02, CA-RF17-01, CA-RF17-02, CA-RF17-03, CA-RF18-01, CA-RF18-02, CA-RF19-01, CA-RF19-02, CA-RF21-01, CA-RF21-02, CA-RF22-01 | CA-RF20-01, CA-RF20-02, CA-RF23-01 | 59 de 62 (95,2 %) |
-| Casos borde | CB-01, CB-02, CB-03, CB-04, CB-05, CB-06, CB-07, CB-08, CB-09, CB-10, CB-11, CB-12, CB-15 | CB-13, CB-14, CB-16, CB-17 | 13 de 17 (76,5 %) |
+| Casos borde | CB-01, CB-02, CB-03, CB-04, CB-05, CB-06, CB-07, CB-08, CB-09, CB-10, CB-11, CB-12, CB-13, CB-14, CB-15 | CB-16, CB-17 | 15 de 17 (88,2 %) |
 
 El detalle de qué historia y escenario cubre cada criterio está en la tabla de la sección A.
 

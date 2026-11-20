@@ -672,4 +672,36 @@
 
 ---
 
-**Total de casos: 72 (TC-001 a TC-072).**
+### TC-073: Ruta de más de 260 caracteres en copia
+- **Origen:** CB-13
+- **Precondiciones:** Ruta de más de 260 caracteres.
+- **Datos de prueba:** Ruta larga.
+- **Pasos:**
+  1. Acción: Intentar copiar. → Esperado: la operación puede fallar según la configuración de Windows (no se activa `\\?\`).
+- **Resultado esperado final:** Comportamiento documentado.
+
+### TC-074: Enlaces simbólicos y junctions en copia
+- **Origen:** CB-14
+- **Precondiciones:** Origen es un enlace simbólico o junction.
+- **Datos de prueba:** Enlace simbólico.
+- **Pasos:**
+  1. Acción: Copiar. → Esperado: os.walk no sigue enlaces a directorios y copy2 copia el contenido del archivo enlazado, sin manejo especial de reparse points.
+- **Resultado esperado final:** Comportamiento documentado.
+
+### TC-075: Ruta de más de 260 caracteres en movimiento
+- **Origen:** CB-13
+- **Precondiciones:** Ruta de más de 260 caracteres.
+- **Datos de prueba:** Ruta larga.
+- **Pasos:**
+  1. Acción: Intentar mover. → Esperado: la operación puede fallar según la configuración de Windows (no se activa `\\?\`).
+- **Resultado esperado final:** Comportamiento documentado.
+
+### TC-076: Ruta de más de 260 caracteres en cambio de ruta
+- **Origen:** CB-13
+- **Precondiciones:** Ruta de más de 260 caracteres.
+- **Datos de prueba:** Ruta larga.
+- **Pasos:**
+  1. Acción: Intentar cambiar a esa ruta. → Esperado: la operación puede fallar según la configuración de Windows (no se activa `\\?\`).
+- **Resultado esperado final:** Comportamiento documentado.
+
+**Total de casos: 76 (TC-001 a TC-076).**

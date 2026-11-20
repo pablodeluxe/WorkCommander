@@ -81,6 +81,14 @@ When el destino no es una carpeta existente
 Then se muestra "El destino debe ser una carpeta existente."
 ```
 
+**Escenario 7: Ruta de más de 260 caracteres**
+Origen: CB-13
+```gherkin
+Given una ruta de más de 260 caracteres
+When se intenta mover
+Then la operación puede fallar según la configuración de Windows (no se activa `\\?\`)
+```
+
 ---
 
 ## 4. Fuera de alcance de la historia

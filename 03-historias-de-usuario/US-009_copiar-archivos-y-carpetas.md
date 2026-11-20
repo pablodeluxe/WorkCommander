@@ -114,6 +114,22 @@ When se valida
 Then se muestra "El origen y el destino son el mismo."
 ```
 
+**Escenario 11: Ruta de más de 260 caracteres**
+Origen: CB-13
+```gherkin
+Given una ruta de más de 260 caracteres
+When se intenta copiar
+Then la operación puede fallar según la configuración de Windows (no se activa `\\?\`)
+```
+
+**Escenario 12: Enlaces simbólicos y junctions**
+Origen: CB-14
+```gherkin
+Given un origen que es un enlace simbólico o junction
+When se copia
+Then os.walk no sigue enlaces a directorios y copy2 copia el contenido del archivo enlazado, sin manejo especial de reparse points
+```
+
 ---
 
 ## 4. Fuera de alcance de la historia

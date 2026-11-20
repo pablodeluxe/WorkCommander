@@ -865,7 +865,7 @@ CA-RF22-01: Aviso en consola pequeña
 ```
 Given una ventana de 30×10
 When se dibuja la interfaz
-Then se muestra "Consola demasiado peque\u00f1a." y la indicación de tamaño mínimo
+Then se muestra "Consola demasiado pequeña." y la indicación de tamaño mínimo
 ```
 
 **Prioridad**: Media
@@ -914,7 +914,7 @@ Then se imprimen 5 "OK" y el resultado final es "5/5 pruebas correctas"
 | CB-09 | Archivo mayor a 8 MiB en el visor | Se trunca y se indica ` (truncado)` |
 | CB-10 | Archivo binario con `\x00` | Se ofrece Texto o Hexadecimal; Esc cancela |
 | CB-11 | Carpeta inaccesible en `reload()` | Flash de error y lista vacía con `..` |
-| CB-12 | Ventana menor a 40×12 | Se muestra `Consola demasiado peque\u00f1a.` en lugar de la interfaz |
+| CB-12 | Ventana menor a 40×12 | Se muestra `Consola demasiado pequeña.` en lugar de la interfaz |
 | CB-13 | Ruta de más de 260 caracteres | Puede fallar según configuración de Windows; no se activa `\\?\` |
 | CB-14 | Enlaces simbólicos y junctions | `os.walk` no sigue enlaces a directorios; `copy2` copia el contenido del archivo enlazado; sin manejo especial de reparse points |
 | CB-15 | Proceso matado abruptamente | El título puede quedar `WorkCommander`; no hay cleanup |

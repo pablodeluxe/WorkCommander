@@ -55,6 +55,14 @@ When se confirma
 Then se interpreta como "D:\" y se abre si es un directorio
 ```
 
+**Escenario 4: Ruta de más de 260 caracteres**
+Origen: CB-13
+```gherkin
+Given una ruta de más de 260 caracteres
+When se intenta cambiar a ella
+Then la operación puede fallar según la configuración de Windows (no se activa `\\?\`)
+```
+
 ---
 
 ## 4. Fuera de alcance de la historia
