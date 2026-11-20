@@ -433,7 +433,7 @@ primera opción. Se usa al abrir un archivo binario y en **Ver forzado**.
 Mensaje (`dialog_message`): cualquier tecla lo cierra.
 
 Visor/paginador (`pager`): `↑`/`↓`, `RePág`/`AvPág`, `Inicio`/`Fin`, `q`/`Q`/`Esc`
-para salir, `F10` también cierra.
+para salir. En el visor modal (F3) las teclas se enrutan hasta cerrarlo; `F10` no se maneja en el visor.
 
 ---
 
@@ -793,7 +793,7 @@ Ayuda
 
 - **Teclas**: abre el paginador con `HELP_TEXT`, que resume funciones,
   navegación y operaciones.
-- **Acerca de**: diálogo con nombre, versión 1.1, descripción y tecnologías.
+- **Acerca de**: diálogo con nombre, versión 1.2, descripción y tecnologías.
 
 ### 7.18. Salir
 
@@ -1395,7 +1395,7 @@ cancelación.
 16. **Unidades**: solo letras `A:`–`Z:`. No se listan volúmenes montados en
     carpetas ni rutas UNC en la vista de unidades (aunque se pueden escribir a
     mano en "Cambiar unidad o ruta").
-17. **Sin ratón**: no hay clic, rueda ni selección con ratón.
+17. **Ratón**: soporte básico de clic para activar el panel y seleccionar la entrada de la fila clicada. No hay rueda, doble clic ni operaciones con ratón. (El README anterior afirmaba "sin ratón"; ver PA-02 de SPEC-001.)
 18. **Sin múltiples instancias controladas**: se pueden abrir varias.
 19. **Codificaciones**: el visor detecta UTF-8, UTF-16 (BOM o patrón) y cp1252.
     Otras codificaciones (shift-jis, GBK, etc.) se verán mal; se puede usar el
@@ -1601,6 +1601,13 @@ WorkCommander\
 ├─ WorkCommander.bat         Lanzador para CMD con Python
 ├─ build_exe.bat             Compilación con PyInstaller
 ├─ README.md                 Este documento
+├─ casos-de-prueba-manual.md 72 casos de prueba manuales (TC-001…TC-072)
+├─ matriz-trazabilidad.md    Matriz PED → SPEC → RF → CA/CB → US
+├─ 00-fuentes/               Fuentes de relevamiento
+├─ 01-pedidos/               PED-001 (pedido de origen)
+├─ 02-especificaciones/      SPEC-001 (especificación funcional)
+├─ 03-historias-de-usuario/  US-001…US-021 (historias de usuario)
+├─ .skills/                  Submodules de skills (qa-skills)
 ├─ dist\
 │  └─ WorkCommander.exe      Ejecutable autónomo (7.426.736 bytes)
 └─ tests\
@@ -1617,9 +1624,10 @@ WorkCommander\
 | 19/11/2026 | Endurecimiento: no se puede operar sobre unidades; se rechaza copiar carpeta sobre archivo, copiar archivo sobre carpeta y mover archivo sobre carpeta; el flash de éxito de copia solo aparece si no hubo errores |
 | 19/11/2026 | README reescrito como documentación funcional y técnica completa para handoff |
 | 19/11/2026 | **1.1**: el visor abre cualquier archivo; elección texto/hexadecimal para binarios, detección UTF-16, `Ver forzado` y `Ver archivo por ruta` para ocultos; nuevas pruebas y README actualizado |
+| 20/11/2026 | **1.2**: soporte básico de ratón (activar panel y seleccionar entrada con clic); visor modal en media pantalla; documentación funcional SPEC-001, 21 historias de usuario, matriz de trazabilidad y 72 casos de prueba manuales; submodule qa-skills |
 
 ---
 
-**WorkCommander 1.1** — gestor de archivos de doble panel para la consola de
+**WorkCommander 1.2** — gestor de archivos de doble panel para la consola de
 Windows. Sin dependencias externas, sin instalación y sin sorpresas fuera de las
 documentadas aquí.
